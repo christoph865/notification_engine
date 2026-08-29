@@ -23,5 +23,5 @@ celery_app.conf.update(
 
 
 # 3. Explicitly tell Celery where to look to find background tasks.
-celery_app.conf.autodiscover_tasks(["src.workers"])
+celery_app.autodiscover_tasks(["src.workers"])
 
