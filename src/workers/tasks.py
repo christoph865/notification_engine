@@ -51,6 +51,8 @@ def send_notification_task(self, notification_id: str):
         db.rollback()
         logger.warning(f"Network glitch occurred for task: {notification_id}. Retrying...")
         
+        # 1 . Initialize the tracker variable as None upfront to prevent unbound erros 
+        db_retry = None
         # Increment our analytical database retry tracking counter
         try:
             db_retry = SessionLocal()
@@ -61,7 +63,8 @@ def send_notification_task(self, notification_id: str):
         except Exception:
             pass
         finally:
-            db_retry.close()
+            if db_retry is not None:
+                db_retry.close()
             
         # 7. Automatically re-enqueue the task into Redis with an exponential delay countdown
         raise self.retry(exc=exc)

@@ -37,7 +37,7 @@ def send_notification(payload: NotificationCreate, db: Session = Depends(get_db)
         
         # 2. The Magic Part: Offload the task to the Redis messaging queue
         # .delay() tells Celery to drop the payload information into Redis and return instantly.
-        send_notification_task.delay(new_notification.id)
+        send_notification_task.delay(new_notification.id) # type: ignore
         
         # 3. Instantly respond to the user with a tracking record pointer
         return {
