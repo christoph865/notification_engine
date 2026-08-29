@@ -8,8 +8,9 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Notification Engine"
     API_V1_STR: str = "/api/v1"
     
-    # ◄── HIER: Diese Zeile hat gefehlt! Das ist der Pfad zu deiner lokalen SQLite-Datenbank.
+    # Pfad zu deiner lokalen SQLite-Datenbank.
     DATABASE_URL: str = "sqlite:///./local_development.db"
+    REDIS_URL: str = "redis://localhost:6379/0"
     
     model_config = SettingsConfigDict(
         env_file=".env", 
