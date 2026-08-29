@@ -1,0 +1,46 @@
+services:
+  # 1. The Redis Message Queue Broker Service
+  redis_broker:
+    image: redis:7.2-alpine
+    container_name: redis_broker_container
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # 2. The FastAPI Web Application Gateway Service
+  api_gateway:
+    build:
+      context: .  # ◄── WICHTIG: Kontext ist das Hauptverzeichnis!
+      dockerfile: docker/app.Dockerfile  # ◄── Zeigt genau auf die Datei im Unterordner
+    container_name: fastapi_api_container
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis_broker:6379/0
+      - DATABASE_URL=sqlite:////workspace/local_development.db
+    volumes:
+      - .:/workspace
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      redis_broker:
+        condition: service_healthy
+
+  # 3. The Asynchronous Celery Background Worker Service
+  celery_worker:
+    build:
+      context: .  # ◄── WICHTIG: Kontext ist das Hauptverzeichnis!
+      dockerfile: docker/app.Dockerfile  # ◄── Zeigt genau auf die Datei im Unterordner
+    container_name: celery_worker_container
+    environment:
+      - REDIS_URL=redis://redis_broker:6379/0
+      - DATABASE_URL=sqlite:////workspace/local_development.db
+    volumes:
+      - .:/workspace
+    command: celery -A src.core.cel_app.celery_app worker --loglevel=info
+    depends_on:
+      redis_broker:
+        condition: service_healthy
