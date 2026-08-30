@@ -1,11 +1,11 @@
 import time
-import logging
 from celery.utils.log import get_task_logger
 from src.core.cel_app import celery_app
 from src.core.database import SessionLocal
 from src.db.models.notification import Notification, NotificationStatus
+# 1. Import our fresh secure domain dispatcher service
+from src.services.notifier import NotificationDispatcher
 
-# 1. Initialize a specialized Celery worker thread-safe logger
 logger = get_task_logger(__name__)
 
 @celery_app.task(
@@ -17,58 +17,60 @@ logger = get_task_logger(__name__)
 def send_notification_task(self, notification_id: str):
     """
     Asynchronous Celery task that pulls a notification from the database,
-    simulates external API networking, and updates its execution status.
+    determines its target medium type, and dispatches it securely.
     """
     logger.info(f"Starting execution for Notification ID: {notification_id}")
     
-    # 2. Open an isolated request-scoped database context session pipeline
     db = SessionLocal()
     
     try:
-        # 3. Retrieve the matching notification row from the database
         notification = db.query(Notification).filter(Notification.id == notification_id).first()
         
         if not notification:
             logger.error(f"Notification {notification_id} not found in database records.")
             return f"Error: Notification {notification_id} not found."
             
-        # 4. Advance status from PENDING to PROCESSING
         notification.status = NotificationStatus.PROCESSING
         db.commit()
         
-        # 5. Simulate heavy external network I/O delivery (e.g., hitting SendGrid/Twilio API)
-        logger.info(f"Dispatching alert channel: {notification.type} to target: {notification.recipient}")
-        time.sleep(2) # ◄── Simulates a 2-second blocking network latency check
+        # 2. Check the channel medium and route execution dynamically
+        if notification.type == "webhook":
+            # Fire an actual outbound, cryptographically-signed HTTP POST request!
+            NotificationDispatcher.dispatch_webhook(
+                destination_url=notification.recipient,
+                title=notification.title,
+                content=notification.content
+            )
+        else:
+            # Fallback simulated logging processing channel for standard channels (email/sms)
+            logger.info(f"Dispatching simulated alert channel: {notification.type} to target: {notification.recipient}")
+            time.sleep(2)
         
-        # 6. Flag execution as completely successful
+        # 3. Finalize row status marker to SENT upon successful completion
         notification.status = NotificationStatus.SENT
         db.commit()
         logger.info(f"Notification {notification_id} successfully sent and logged.")
         return f"Success: Notification {notification_id} sent."
         
     except Exception as exc:
-        # If an unexpected network drop happens, safely roll back the database pool
         db.rollback()
-        logger.warning(f"Network glitch occurred for task: {notification_id}. Retrying...")
+        logger.warning(f"Network glitch or target server error hit task {notification_id}. Retrying...")
         
-        # 1 . Initialize the tracker variable as None upfront to prevent unbound erros 
         db_retry = None
-        # Increment our analytical database retry tracking counter
         try:
             db_retry = SessionLocal()
             noti = db_retry.query(Notification).filter(Notification.id == notification_id).first()
             if noti:
                 noti.retry_count += 1
                 db_retry.commit()
-        except Exception:
-            pass
+        except Exception as retry_err:
+            logger.error(f"Failed to increment retry counter: {retry_err}")
         finally:
             if db_retry is not None:
                 db_retry.close()
             
-        # 7. Automatically re-enqueue the task into Redis with an exponential delay countdown
+        # 4. Automatically trigger exponential retry countdown back into Redis queue
         raise self.retry(exc=exc)
         
     finally:
-        # Guarantee closure of the connection block to prevent execution pool deadlocks
         db.close()
