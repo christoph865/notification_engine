@@ -1,5 +1,23 @@
 services:
-  # 1. The Redis Message Queue Broker Service
+  # 1. NEW: The Enterprise Relational Database Cluster Service
+  postgres_db:
+    image: postgres:16-alpine
+    container_name: postgres_db_container
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=engine_developer
+      - POSTGRES_PASSWORD=secure_market_password_2026
+      - POSTGRES_DB=notification_vault
+    volumes:
+      - postgres_data:/var/lib/postgresql/data  # ◄── Enforces permanent database disk mapping
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U engine_developer -d notification_vault"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 2. The Redis Message Queue Broker Service
   redis_broker:
     image: redis:7.2-alpine
     container_name: redis_broker_container
@@ -11,36 +29,46 @@ services:
       timeout: 3s
       retries: 5
 
-  # 2. The FastAPI Web Application Gateway Service
+  # 3. The FastAPI Web Application Gateway Service
   api_gateway:
     build:
-      context: .  # ◄── WICHTIG: Kontext ist das Hauptverzeichnis!
-      dockerfile: docker/app.Dockerfile  # ◄── Zeigt genau auf die Datei im Unterordner
+      context: .
+      dockerfile: docker/app.Dockerfile
     container_name: fastapi_api_container
     ports:
       - "8000:8000"
     environment:
       - REDIS_URL=redis://redis_broker:6379/0
-      - DATABASE_URL=sqlite:////workspace/local_development.db
+      # ◄── UPDATED: Pointing away from local SQLite to our network PostgreSQL container!
+      - DATABASE_URL=postgresql://engine_developer:secure_market_password_2026@postgres_db:5432/notification_vault
     volumes:
       - .:/workspace
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
+      postgres_db:
+        condition: service_healthy
       redis_broker:
         condition: service_healthy
 
-  # 3. The Asynchronous Celery Background Worker Service
+  # 4. The Asynchronous Celery Background Worker Service
   celery_worker:
     build:
-      context: .  # ◄── WICHTIG: Kontext ist das Hauptverzeichnis!
-      dockerfile: docker/app.Dockerfile  # ◄── Zeigt genau auf die Datei im Unterordner
+      context: .
+      dockerfile: docker/app.Dockerfile
     container_name: celery_worker_container
     environment:
       - REDIS_URL=redis://redis_broker:6379/0
-      - DATABASE_URL=sqlite:////workspace/local_development.db
+      # ◄── UPDATED: Pointing away from local SQLite to our network PostgreSQL container!
+      - DATABASE_URL=postgresql://engine_developer:secure_market_password_2026@postgres_db:5432/notification_vault
     volumes:
       - .:/workspace
     command: celery -A src.core.cel_app.celery_app worker --loglevel=info
     depends_on:
+      postgres_db:
+        condition: service_healthy
       redis_broker:
         condition: service_healthy
+
+# ◄── NEW: Explicit Volume declaration to ensure database tables survive container restarts!
+volumes:
+  postgres_data:
