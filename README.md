@@ -1,85 +1,66 @@
-# Notification Engine
+# High-Scale Distributed Asynchronous Notification Engine
 
-Asynchronous notification delivery system built with **FastAPI**, **Celery**, and **Redis**. Fast API responses (<20ms) with reliable background processing and automatic retry logic.
+A production-grade, containerized asynchronous notification orchestration engine built using **FastAPI**, **Redis**, and **Celery**. This architecture implements structural data validation firewalls, request-scoped isolated transaction pipelines backed by a **PostgreSQL** cluster, and secure cryptographic outbound webhook delivery tracking.
 
-## Features
+## System Architecture Matrix
 
-- Asynchronous notification delivery via Celery/Redis
-- FastAPI with automatic API documentation (Swagger UI)
-- Database transaction logging with status tracking
-- Automatic retry & crash recovery
-- Type-safe with Pydantic validation
+```text
+[ CLIENT TRAFFIC ] ──(localhost:8000)──► [ FastAPI Gateway (api_gateway) ]
+                                                    │
+                             (Validates inputs via Pydantic Schema Firewalls)
+                                                    │
+                                                    ▼
+                                         [ PostgreSQL Ledger ]
+                                      Stamps Row State: "PENDING"
+                                                    │
+                                        (Offloads Metadata Packet)
+                                                    │
+                                                    ▼
+                                          [ Redis Message Broker ]
+                                     (API releases HTTP 202 In <20ms)
+                                                    │
+                                         (Background Consumer)
+                                                    │
+                                                    ▼
+                                        [ Celery Workers (worker) ]
+                                      ├── Advances State: "PROCESSING"
+                                      ├── Computes HMAC-SHA256 Signatures
+                                      └── Dispatches HTTPX Outbound POST
+```
 
-## Tech Stack
+## Deep-Value Tech Stack Specifications
+* **Core Application Gateway:** FastAPI running over ASGI Uvicorn workers.
+* **In-Memory Message Broker Queue:** Redis 7.2 Cache Loops.
+* **Distributed Task Processing Framework:** Celery 5.3 Background Worker Processes.
+* **Enterprise Persistence Ledger:** PostgreSQL 16 Cluster Database.
+* **Validation & Configurations Sentinel:** Pydantic V2 Framework models (`BaseModel` / `BaseSettings`).
+* **Relational ORM Layer Data Mappings:** SQLAlchemy 2.0 type-hinted parameters (`Mapped`).
+* **Automated Verification Testing Suite:** Pytest + HTTPX Async Clients running inside RAM.
 
-- FastAPI 0.141.1 | Uvicorn 0.52.4
-- Celery + Redis (message broker)
-- SQLAlchemy + Pydantic
-- Python 3.8+
+## Local Infrastructure Command Guide
 
-## Quick Start
+Ensure you have **Docker Desktop** running on your host machine before triggering execution paths.
 
-### Prerequisites
-- Python 3.8+
-- Docker (for Redis)
-
-### Installation
-
+### 1. Build and Boot the Multi-Container Stack
+Launch the unified orchestration services (FastAPI, Redis, Postgres DB, and Celery background workers simultaneously):
 ```bash
-# Clone and setup
-git clone <repository-url>
-cd notification-engine
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+docker compose up --build
 ```
+Once booted, the interactive Swagger UI panel automatically populates live at: `http://localhost:8000/docs`
 
-### Running
-
+### 2. Execute the Automated Testing Suite
+Run the isolated in-memory test script cases directly inside the active web application layer space container:
 ```bash
-# Start Redis
-docker run -d -p 6379:6379 redis:latest
-
-# Start FastAPI server
-uvicorn src.main:app --reload
-
-# Start Celery worker (in another terminal)
-celery -A src.tasks.send_task worker --loglevel=info
+docker compose exec api_gateway python -m pytest tests/ -v
 ```
 
-API available at `http://localhost:8000`
-Docs at `http://localhost:8000/docs`
-
-## Usage Example
-
+### 3. Tear Down Infrastructure
+Stop all containers cleanly and dismantle the virtual internal container network connections:
 ```bash
-curl -X POST http://localhost:8000/api/v1/send \
-  -H "Content-Type: application/json" \
-  -d '{
-    "recipient": "user@example.com",
-    "subject": "Test",
-    "message": "Hello!"
-  }'
+docker compose down
 ```
 
-Response: HTTP 202 Accepted with notification ID
-
-## Environment Variables
-
-```env
-PROJECT_NAME=Notification Engine
-API_V1_STR=/api/v1
-DATABASE_URL=sqlite:///./notification.db
-REDIS_URL=redis://localhost:6379
-CELERY_BROKER_URL=redis://localhost:6379/0
-```
-
-## Architecture
-
-- **Request Phase**: FastAPI validates payload, logs to DB (PENDING), enqueues task, returns 202
-- **Background Phase**: Celery worker processes notification asynchronously
-- **Crash Recovery**: Failed tasks automatically retry with rollback/re-queue
-
-## License
-
-MIT
+## Enterprise Cryptographic Webhook Specification
+Every outbound payload carrying a medium channel signature type of `"webhook"` computes a mathematical checksum using the **HMAC-SHA256** hash algorithm. The signature code is attached to the secure transport layer via custom request headers to protect receiving targets from malicious data-tampering hazards:
+* `X-Webhook-Signature`: Hexadecimal HMAC-SHA256 signature hash code string.
+* `X-Timestamp`: Unix boundary tracking timestamp for relay mitigation rules.
